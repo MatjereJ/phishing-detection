@@ -1,4 +1,5 @@
-from flask import Flask, request, jsonify
+from flask import Flask, render_template, request, jsonify
+
 from flask_cors import CORS
 import joblib
 import numpy as np
@@ -288,6 +289,10 @@ def predict_with_transparency(X):
     }
     
     return result
+
+@app.route('/')
+def home():
+    return render_template('client_v3.html')
 
 @app.route('/analyze', methods=['POST'])
 def analyze():
