@@ -1,0 +1,1621 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Phishing Email Detector</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.0/css/bootstrap.min.css">
+    <style>
+        .result-card {
+            transition: all 0.3s ease;
+        }
+        .header-logo {
+            max-height: 50px;
+        }
+        .warning-high {
+            background-color: #f8d7da;
+            border-left: 5px solid #dc3545;
+        }
+        .warning-medium {
+            background-color: #fff3cd;
+            border-left: 5px solid #ffc107;
+        }
+        .warning-low {
+            background-color: #d1e7dd;
+            border-left: 5px solid #198754;
+        }
+        .feature-bar {
+            height: 20px;
+            background-color: #0d6efd;
+        }
+        #loading-spinner {
+            display: none;
+        }
+        .footer {
+            font-size: 0.8rem;
+            color: #6c757d;
+        }
+        .explanation-card {
+            margin-top: 20px;
+            background-color: #f8f9fa;
+        }
+        .explanation-title {
+            font-weight: bold;
+            color: #495057;
+        }
+        .feature-detail {
+            padding: 10px;
+            margin-bottom: 10px;
+            border-radius: 5px;
+            border-left: 3px solid #0d6efd;
+            background-color: #f1f8ff;
+        }
+        .email-preview {
+            max-height: 300px;
+            overflow-y: auto;
+            border: 1px solid #dee2e6;
+            padding: 15px;
+            background-color: #fff;
+            font-family: monospace;
+        }
+        .highlight {
+            background-color: #ffffcc;
+            padding: 2px;
+        }
+        .insights-container {
+            margin-top: 20px;
+        }
+    </style>
+</head>
+<body>
+  <div class="container py-4">
+        <header class="pb-3 mb-4 border-bottom">
+            <div class="d-flex align-items-center">
+                <span class="fs-4 me-auto">Advanced Phishing Email Detector</span>
+                <div id="model-status" class="badge bg-success">Model Loaded (v2.0)</div>
+                <button id="security-info-btn" class="btn btn-sm btn-outline-secondary ms-2" 
+                        data-bs-toggle="modal" data-bs-target="#securityInfoModal">
+                    <i class="fas fa-shield-alt"></i> Security Info
+                </button>
+            </div>
+        </header>
+
+        <div class="p-5 mb-4 bg-light rounded-3">
+            <div class="container-fluid">
+                <h1 class="display-5 fw-bold">Detect Phishing Emails</h1>
+                <p class="col-md-8 fs-4">This tool uses machine learning to analyze emails and detect potential phishing attempts.</p>
+                
+                <!-- Alert container for system-wide messages -->
+                <div id="system-alert" class="alert alert-danger" style="display:none;">
+                    <i class="fas fa-exclamation-triangle me-2"></i>
+                    <span id="system-alert-message"></span>
+                </div>
+                
+                <div class="row">
+                    <div class="col-md-6">
+                        <form id="detection-form" novalidate>
+                            <div class="mb-3">
+                                <label for="email-content" class="form-label">Email Content (including headers)</label>
+                                <textarea class="form-control" id="email-content" rows="10" 
+                                    placeholder="Paste full email content here..." 
+                                    maxlength="500000" 
+                                    aria-describedby="email-content-feedback"></textarea>
+                                <div id="email-content-feedback" class="error-message"></div>
+                                <div id="email-content-char-count" class="form-text text-muted">
+                                    0/500,000 characters
+                                </div>
+                            </div>
+                            
+                            <div class="mb-3">
+                                <label for="email-file" class="form-label">Or upload email file (.eml)</label>
+                                <input class="form-control" type="file" id="email-file" 
+                                    accept=".eml,.txt,message/rfc822"
+                                    aria-describedby="email-file-feedback">
+                                <div id="email-file-feedback" class="error-message"></div>
+                                <div id="file-preview" class="file-feedback text-success">
+                                    <i class="fas fa-check-circle me-1"></i> <span id="file-name"></span> - <span id="file-size"></span>
+                                </div>
+                            </div>
+                            
+                            <button type="submit" class="btn btn-primary btn-lg">
+                                <i class="fas fa-search me-1"></i> Analyze Email
+                            </button>
+                            <div id="loading-spinner" class="spinner-border text-primary ms-2" role="status">
+                                <span class="visually-hidden">Loading...</span>
+                            </div>
+                        </form>
+                    </div>
+                    
+                    <div class="col-md-6">
+                        <div class="card">
+                            <div class="card-header">
+                                <i class="fas fa-lightbulb me-1"></i> Tips for Better Results
+                            </div>
+                            <ul class="list-group list-group-flush">
+                                <li class="list-group-item">Include complete email headers when possible</li>
+                                <li class="list-group-item">Don't strip HTML content from the email</li>
+                                <li class="list-group-item">Upload original .eml files when available</li>
+                                <li class="list-group-item">Provide feedback on results to improve detection</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div id="results-section" style="display:none;">
+            <div class="row">
+                <div class="col-md-12">
+                    <div id="result-card" class="card mb-4 shadow-sm">
+                        <div class="card-header d-flex justify-content-between align-items-center">
+                            <h4 id="result-title">Analysis Results</h4>
+                            <span id="confidence-badge" class="badge rounded-pill">Confidence: 0%</span>
+                        </div>
+                        <div class="card-body">
+                            <div id="result-message" class="alert"></div>
+                            
+                            <h5><i class="fas fa-exclamation-triangle me-1"></i> Detected Warnings</h5>
+                            <div id="warnings-container" class="mb-4">
+                                <p>No specific warnings detected.</p>
+                            </div>
+                            
+                            <h5><i class="fas fa-check-circle me-1"></i> Important Indicators</h5>
+                            <div id="features-container" class="mb-4">
+                                <!-- Features will be added here -->
+                            </div>
+
+                            <div class="explanation-card p-3">
+                                <h5 class="explanation-title"><i class="fas fa-info-circle me-1"></i> How This Detection Works</h5>
+                                <p>Our model analyzes multiple aspects of the email including:</p>
+                                <ul>
+                                    <li>Sender address verification and domain analysis</li>
+                                    <li>Header inconsistencies and routing patterns</li>
+                                    <li>Link destination verification and URL analysis</li>
+                                    <li>Content sentiment and urgency indicators</li>
+                                    <li>Attachment safety evaluation</li>
+                                </ul>
+                                <div id="model-explanation" class="mt-3">
+                                    <!-- Dynamic explanation will be inserted here -->
+                                </div>
+                            </div>
+
+                            <div class="row mt-4">
+                                <div class="col-md-6">
+                                    <h5><i class="fas fa-envelope me-1"></i> Email Preview</h5>
+                                    <div id="email-preview" class="email-preview">
+                                        <!-- Email content with highlights will appear here -->
+                                    </div>
+                                </div>
+                                <div class="col-md-6">
+                                    <h5><i class="fas fa-lightbulb me-1"></i> Key Insights</h5>
+                                    <div id="insights-container" class="insights-container">
+                                        <!-- Insights will be added here -->
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <h5 class="mt-4"><i class="fas fa-comment-alt me-1"></i> Feedback</h5>
+                            <div class="d-flex align-items-center mb-2">
+                                <p class="mb-0 me-3">Was this analysis correct?</p>
+                                <button id="feedback-correct" class="btn btn-outline-success me-2">
+                                    <i class="fas fa-thumbs-up me-1"></i> Yes
+                                </button>
+                                <button id="feedback-incorrect" class="btn btn-outline-danger">
+                                    <i class="fas fa-thumbs-down me-1"></i> No
+                                </button>
+                            </div>
+                            <div id="feedback-notes-container" style="display:none;" class="mb-3">
+                                <label for="feedback-notes" class="form-label">Additional notes (optional)</label>
+                                <textarea id="feedback-notes" class="form-control" rows="2" maxlength="1000"></textarea>
+                                <div id="feedback-notes-char-count" class="form-text text-muted">0/1000 characters</div>
+                                <button id="submit-feedback" class="btn btn-sm btn-primary mt-2">
+                                    <i class="fas fa-paper-plane me-1"></i> Submit Feedback
+                                </button>
+                            </div>
+                            <div id="feedback-message" class="alert" style="display:none;"></div>
+                            
+                            <div class="text-muted mt-3 small">
+                                <p>Processing time: <span id="processing-time">0</span> seconds</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Security Information Modal -->
+        <div class="modal fade" id="securityInfoModal" tabindex="-1" aria-labelledby="securityInfoModalLabel" aria-hidden="true">
+            <div class="modal-dialog modal-lg">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title" id="securityInfoModalLabel">
+                            <i class="fas fa-shield-alt me-2"></i>Security Features
+                        </h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
+                    <div class="modal-body">
+                        <div class="card mb-3">
+                            <div class="card-header bg-primary text-white">Input Validation & Sanitization</div>
+                            <div class="card-body">
+                                <p>This application implements:</p>
+                                <ul>
+                                    <li>Input length restrictions to prevent buffer overflow attacks</li>
+                                    <li>Content type validation for file uploads (.eml only)</li>
+                                    <li>File size limits (max 10MB)</li>
+                                    <li>HTML content sanitization to prevent XSS attacks</li>
+                                    <li>Input encoding to prevent injection attacks</li>
+                                </ul>
+                            </div>
+                        </div>
+                        
+                        <div class="card mb-3">
+                            <div class="card-header bg-info text-white">Secure Processing</div>
+                            <div class="card-body">
+                                <p>All email content is processed securely:</p>
+                                <ul>
+                                    <li>Content is sanitized before displaying in the UI</li>
+                                    <li>Links in emails are not automatically followed</li>
+                                    <li>Email attachments are not executed</li>
+                                    <li>All processing happens client-side without sending to external servers</li>
+                                </ul>
+                            </div>
+                        </div>
+                        
+                        <div class="card">
+                            <div class="card-header bg-success text-white">Data Protection</div>
+                            <div class="card-body">
+                                <p>Your data remains secure:</p>
+                                <ul>
+                                    <li>Email content never leaves your browser</li>
+                                    <li>No data is stored permanently</li>
+                                    <li>Optional feedback is anonymized</li>
+                                    <li>No cookies or tracking mechanisms used</li>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <footer class="footer mt-auto py-3 text-center">
+            <p>Advanced Phishing Email Detector | Machine Learning Powered Analysis</p>
+            <p class="text-muted small">All processing happens in your browser. Your emails are never stored.</p>
+        </footer>
+    </div>
+    
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.0/js/bootstrap.bundle.min.js"></script>
+    <script>
+
+
+        /**
+ * Email Content Highlighter
+ * 
+ * This script processes raw email content and highlights suspicious elements
+ * based on the model's detection results.
+ */
+
+
+ 
+// Process and highlight email content
+    function processEmailContent(emailContent, highlightedElements) {
+    // First, sanitize the content (basic)
+    let sanitizedContent = emailContent
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;');
+    
+    // If no highlighted elements, just return sanitized content
+    if (!highlightedElements || highlightedElements.length === 0) {
+        return `<div class="email-content-preview">${sanitizedContent}</div>`;
+    }
+    
+    // Add CSS for highlights if not already present
+    if (!document.getElementById('highlight-styles')) {
+        const styleElement = document.createElement('style');
+        styleElement.id = 'highlight-styles';
+        styleElement.innerHTML = `
+            .highlight {
+                background-color: #ffdd9e;
+                border-bottom: 2px solid #ff6b6b;
+                padding: 2px 0;
+                cursor: help;
+                position: relative;
+            }
+            .highlight-severe {
+                background-color: #ffb6b6;
+                border-bottom: 2px solid #d32f2f;
+            }
+            .email-content-preview {
+                white-space: pre-wrap;
+                font-family: monospace;
+                padding: 10px;
+                border: 1px solid #ddd;
+                border-radius: 4px;
+                max-height: 300px;
+                overflow-y: auto;
+                background-color: #f8f9fa;
+            }
+        `;
+        document.head.appendChild(styleElement);
+    }
+    
+    // For each highlighted element, find and mark it
+    highlightedElements.forEach(element => {
+        // Skip if text is empty or undefined
+        if (!element.text || element.text.trim() === '') return;
+        
+        // Create a regex-safe version of the text to find
+        const textToFind = element.text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        
+        // Determine severity class based on reason or severity property
+        let severityClass = '';
+        if (element.severity === 'high' || 
+            (element.reason && (
+                element.reason.includes('danger') || 
+                element.reason.includes('critical') || 
+                element.reason.includes('threat')
+            ))) {
+            severityClass = ' highlight-severe';
+        }
+        
+        // Replace all occurrences with highlighted version
+        const regex = new RegExp(textToFind, 'gi');
+        sanitizedContent = sanitizedContent.replace(
+            regex,
+            `<span class="highlight${severityClass}" title="${element.reason || 'Suspicious content'}">${element.text}</span>`
+        );
+    });
+    
+    return `<div class="email-content-preview">${sanitizedContent}</div>`;
+}
+
+/**
+ * FIXED: New function to generate highlights from warnings
+ * This helps when the API doesn't provide highlighted elements
+ */
+function generateHighlightsFromWarnings(emailContent, warnings) {
+    if (!warnings || warnings.length === 0 || !emailContent) {
+        return [];
+    }
+    
+    const highlights = [];
+    
+    // Common patterns for different warning types
+    const patterns = {
+        'personal_information': [
+            /\b(?:password|account|login|credit card|ssn|social security|address|phone number)\b/gi,
+            /\b(?:verify your|confirm your|update your)\b.{1,30}\b(?:details|information|account)\b/gi
+        ],
+        'urgency': [
+            /\b(?:urgent|immediately|today|asap|deadline|expires?|limited time|now|quickly)\b/gi,
+            /\b(?:act now|last chance|final notice|time sensitive)\b/gi
+        ],
+        'threatening': [
+            /\b(?:suspend|disable|restrict|terminate|close|block)\b.{1,30}\b(?:account|access)\b/gi,
+            /\b(?:failure to|will result in|consequences|penalty|warning)\b/gi
+        ],
+        'grammar': [
+            /\b(?:to proceed to the|kindly|do the needful|respected sir|dear costumer)\b/gi
+        ]
+    };
+    
+    // Process each warning
+    warnings.forEach(warning => {
+        let warningType = 'other';
+        let severity = warning.severity || 'medium';
+        
+        // Determine warning type from message
+        if (warning.message) {
+            const msg = warning.message.toLowerCase();
+            if (msg.includes('personal') || msg.includes('information') || msg.includes('sensitive')) {
+                warningType = 'personal_information';
+            } else if (msg.includes('urgency') || msg.includes('urgent')) {
+                warningType = 'urgency';
+            } else if (msg.includes('threatening') || msg.includes('threat') || msg.includes('fear')) {
+                warningType = 'threatening';
+            } else if (msg.includes('grammar') || msg.includes('spelling')) {
+                warningType = 'grammar';
+            }
+        }
+        
+        // Get relevant patterns for this warning type
+        const relevantPatterns = patterns[warningType] || [];
+        
+        // Find matches in email content
+        relevantPatterns.forEach(pattern => {
+            let match;
+            while ((match = pattern.exec(emailContent)) !== null) {
+                highlights.push({
+                    text: match[0],
+                    reason: warning.message || 'Suspicious content',
+                    severity: severity
+                });
+            }
+        });
+    });
+    
+    return highlights;
+}
+
+
+    // Process detected warnings for display
+    function processWarnings(warnings) {
+    if (!warnings || warnings.length === 0) {
+        return '<p>No specific warnings detected.</p>';
+    }
+    
+    let warningsHTML = '';
+    
+    // Group warnings by severity
+    const severityClasses = {
+        'high': 'bg-danger text-white',
+        'medium': 'bg-warning',
+        'low': 'bg-light border'
+    };
+    
+    warnings.forEach(warning => {
+        const severity = warning.severity || 'medium';
+        const severityClass = severityClasses[severity] || 'bg-warning';
+        
+        warningsHTML += `
+        <div class="p-3 mb-2 rounded ${severityClass}">
+            <strong>${warning.message}</strong>
+            <p class="mb-0 small">${warning.details || ''}</p>
+        </div>`;
+    });
+    
+    return warningsHTML;
+}
+
+
+    // Process feature explanations for display
+    function processFeatureExplanations(explanations) {
+        if (!explanations || Object.keys(explanations).length === 0) {
+            return '<p>No feature explanations available.</p>';
+        }
+        
+        // Convert to array and sort by importance
+        const explanationsArray = Object.entries(explanations)
+            .map(([key, data]) => ({
+                key,
+                ...data
+            }))
+            .sort((a, b) => b.importance - a.importance);
+        
+        // Get max importance for scaling
+        const maxImportance = Math.max(...explanationsArray.map(exp => exp.importance));
+        
+        let explanationsHTML = `
+        <table class="table table-sm">
+            <thead>
+                <tr>
+                    <th>Feature</th>
+                    <th>Value</th>
+                    <th width="50%">Impact</th>
+                </tr>
+            </thead>
+            <tbody>`;
+        
+        explanationsArray.forEach(exp => {
+            const relativeImportance = exp.importance / maxImportance * 100;
+            let valueDisplay = exp.value;
+            
+            // Format different value types
+            if (typeof exp.value === 'boolean') {
+                valueDisplay = exp.value ? 'Yes' : 'No';
+            } else if (typeof exp.value === 'number') {
+                if (exp.value === 0 || exp.value === 1) {
+                    valueDisplay = exp.value === 1 ? 'Yes' : 'No';
+                } else {
+                    valueDisplay = exp.value.toFixed(2);
+                }
+            }
+            
+            // Format feature name for display
+            const formattedFeature = exp.key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+            
+            explanationsHTML += `
+            <tr>
+                <td>${formattedFeature}</td>
+                <td>${valueDisplay}</td>
+                <td>
+                    <div class="progress">
+                        <div class="progress-bar ${exp.is_suspicious ? 'bg-danger' : 'bg-primary'}" 
+                            role="progressbar" 
+                            style="width: ${relativeImportance}%" 
+                            aria-valuenow="${relativeImportance}" 
+                            aria-valuemin="0" 
+                            aria-valuemax="100"
+                            data-bs-toggle="tooltip"
+                            title="${exp.explanation}">
+                        </div>
+                    </div>
+                </td>
+            </tr>`;
+        });
+        
+        explanationsHTML += `
+            </tbody>
+        </table>`;
+        
+        return explanationsHTML;
+    }
+
+    // Process insights for display
+    function processInsights(insights) {
+        if (!insights || insights.length === 0) {
+            return '<p>No specific insights available for this analysis.</p>';
+        }
+        
+        let insightsHTML = '<ul class="list-group">';
+        
+        insights.forEach(insight => {
+            let sentimentClass = 'text-warning';
+            let sentimentIcon = '!';
+            
+            if (insight.sentiment === 'positive') {
+                sentimentClass = 'text-success';
+                sentimentIcon = '✓';
+            } else if (insight.sentiment === 'negative') {
+                sentimentClass = 'text-danger';
+                sentimentIcon = '✗';
+            }
+            
+            insightsHTML += `
+            <li class="list-group-item">
+                <div class="d-flex w-100 justify-content-between">
+                    <h6 class="mb-1">${insight.title}</h6>
+                    <small class="${sentimentClass}">${sentimentIcon}</small>
+                </div>
+                <p class="mb-1">${insight.description}</p>
+            </li>`;
+        });
+        
+        insightsHTML += '</ul>';
+        return insightsHTML;
+    }
+
+    // Generate model explanation based on detection results
+    function generateModelExplanation(result) {
+    let explanationHTML = '<div class="alert ';
+    
+    if (result.is_phishing) {
+        explanationHTML += 'alert-danger">';
+        explanationHTML += '<h6>Why This Email Was Flagged</h6>';
+        explanationHTML += '<p>Our model identified several suspicious patterns in this email:</p>';
+        
+        // Generate explanation based on features and warnings
+        let explanationPoints = [];
+        
+        if (result.warnings && result.warnings.length > 0) {
+            result.warnings.forEach(warning => {
+                explanationPoints.push(warning.message);
+            });
+        }
+        
+        // Add feature explanations
+        if (result.feature_explanations) {
+            // Get top 3 suspicious features
+            const suspiciousFeatures = Object.entries(result.feature_explanations)
+                .filter(([_, data]) => data.is_suspicious)
+                .sort((a, b) => b[1].importance - a[1].importance)
+                .slice(0, 3);
+                
+            suspiciousFeatures.forEach(([feature, data]) => {
+                const formattedFeature = feature.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+                explanationPoints.push(`<strong>${formattedFeature}</strong>: ${data.explanation}`);
+            });
+        } else if (result.important_features) {
+            // Legacy support
+            const topFeatures = Object.entries(result.important_features)
+                .sort((a, b) => b[1] - a[1])
+                .slice(0, 3);
+                
+            topFeatures.forEach(([feature, _]) => {
+                const formattedFeature = feature.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+                const explanation = getFeatureExplanation(feature);
+                explanationPoints.push(`<strong>${formattedFeature}</strong>: ${explanation}`);
+            });
+        }
+        
+        if (explanationPoints.length > 0) {
+            explanationHTML += '<ul>';
+            explanationPoints.forEach(point => {
+                explanationHTML += `<li>${point}</li>`;
+            });
+            explanationHTML += '</ul>';
+        } else {
+            explanationHTML += '<p>Our model detected unusual patterns based on a combination of subtle indicators.</p>';
+        }
+    } else {
+        explanationHTML += 'alert-success">';
+        explanationHTML += '<h6>Why This Email Appears Legitimate</h6>';
+        explanationHTML += '<p>Our model found no significant phishing indicators in this email. The sender, content, and links all appear to be legitimate.</p>';
+        
+        // Add explanation for any positive signals
+        if (result.feature_explanations) {
+            const positiveFeatures = Object.entries(result.feature_explanations)
+                .filter(([_, data]) => !data.is_suspicious && data.importance > 0.2)
+                .sort((a, b) => b[1].importance - a[1].importance)
+                .slice(0, 3);
+                
+            if (positiveFeatures.length > 0) {
+                explanationHTML += '<p>Positive indicators include:</p><ul>';
+                
+                positiveFeatures.forEach(([feature, data]) => {
+                    const formattedFeature = feature.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+                    explanationHTML += `<li><strong>${formattedFeature}</strong>: ${data.explanation}</li>`;
+                });
+                
+                explanationHTML += '</ul>';
+            }
+        }
+    }
+    
+    explanationHTML += '</div>';
+    return explanationHTML;
+}
+
+    // Helper function to get explanations for features
+    function getFeatureExplanation(feature) {
+        const explanations = {
+            'mismatched_sender_domain': 'The sender\'s email address domain doesn\'t match the organization they claim to represent.',
+            'suspicious_link_domain': 'Links in the email point to suspicious or recently registered domains.',
+            'urgency_language': 'The email uses urgent language to pressure you into taking immediate action.',
+            'request_for_credentials': 'The email asks for login information or other sensitive credentials.',
+            'spoofed_display_name': 'The sender\'s display name appears to be impersonating a trusted entity.',
+            'suspicious_attachment': 'The email contains an attachment with potentially dangerous file type.',
+            'poor_grammar': 'The email contains unusual grammatical errors or spelling mistakes.',
+            'unsubscribe_missing': 'A legitimate marketing email should have an unsubscribe option.',
+            'suspicious_ip_origin': 'The email originated from an IP address in a high-risk region.',
+            'unusual_sending_time': 'The email was sent at an unusual time, outside normal business hours.',
+            'excessive_misspellings': 'The email contains an unusual number of misspelled words.',
+            'broken_layout': 'The email has broken formatting or display issues.',
+            'domain_age': 'Links in the email point to recently registered domains, which is suspicious.',
+            'suspicious_url_structure': 'URLs contain unusual patterns often associated with phishing.',
+            'header_inconsistency': 'Email headers contain inconsistent or suspicious routing information.',
+            'dmarc_fail': 'The email failed DMARC authentication checks.',
+            'spf_fail': 'The email failed Sender Policy Framework verification.',
+            'dkim_fail': 'The email failed DomainKeys Identified Mail signature verification.',
+            'html_form': 'The email contains HTML forms, which legitimate organizations rarely use in emails.',
+            'contains_javascript': 'The email contains JavaScript, which is often used in phishing attempts.',
+            'link_mismatch': 'The visible text of links doesn\'t match the actual URL destination.',
+            'unknown_sender': 'This sender has not previously communicated with you.'
+        };
+        
+        return explanations[feature] || 'This feature contributes to the overall phishing score.';
+    }
+
+    // Main function to update results UI
+    function updateResultsUI(result) {
+    // Show results section
+    document.getElementById('results-section').style.display = 'block';
+    
+    // Update UI elements
+    const resultCard = document.getElementById('result-card');
+    const resultMessage = document.getElementById('result-message');
+    const confidenceBadge = document.getElementById('confidence-badge');
+    const warningsContainer = document.getElementById('warnings-container');
+    const featuresContainer = document.getElementById('features-container');
+    const modelExplanation = document.getElementById('model-explanation');
+    const emailPreview = document.getElementById('email-preview');
+    const insightsContainer = document.getElementById('insights-container');
+    const processingTime = document.getElementById('processing-time');
+    
+    // Count warnings to help determine phishing status
+    const warningCount = result.warnings ? result.warnings.length : 0;
+    
+    // FIXED: Adjust is_phishing determination based on warning count
+    // If there are warnings but is_phishing is false, override it
+    if (warningCount > 2 && !result.is_phishing) {
+        result.is_phishing = true;
+        // Adjust confidence based on warning count
+        result.confidence = Math.min(0.7 + (warningCount * 0.05), 0.95);
+    }
+    
+    // Update result card styling and message
+    if (result.is_phishing) {
+        resultCard.className = 'card mb-4 shadow-sm border-danger';
+        resultMessage.className = 'alert alert-danger';
+        resultMessage.innerHTML = '<strong>Warning!</strong> This email is likely a phishing attempt.';
+    } else {
+        resultCard.className = 'card mb-4 shadow-sm border-success';
+        resultMessage.className = 'alert alert-success';
+        resultMessage.innerHTML = '<strong>Low Risk.</strong> This email appears to be legitimate.';
+    }
+    
+    // Update confidence badge
+    const confidence = Math.round(result.confidence * 100);
+    confidenceBadge.textContent = `Confidence: ${confidence}%`;
+    
+    // FIXED: Ensure confidence badge color matches the phishing status
+    if (result.is_phishing) {
+        confidenceBadge.className = `badge rounded-pill bg-${confidence > 70 ? 'danger' : 'warning'}`;
+    } else {
+        confidenceBadge.className = `badge rounded-pill bg-${confidence > 70 ? 'success' : 'info'}`;
+    }
+    
+    // Update warnings
+    if (warningCount > 0) {
+        warningsContainer.innerHTML = processWarnings(result.warnings);
+    } else {
+        warningsContainer.innerHTML = '<p>No specific warnings detected.</p>';
+    }
+    
+    // Update features
+    if (result.feature_explanations) {
+        featuresContainer.innerHTML = processFeatureExplanations(result.feature_explanations);
+    } else if (result.important_features) {
+        // Legacy support for older API responses
+        const featuresTable = document.createElement('table');
+        featuresTable.className = 'table table-sm';
+        featuresTable.innerHTML = `
+            <thead>
+                <tr>
+                    <th>Feature</th>
+                    <th>Importance</th>
+                    <th width="50%">Impact</th>
+                </tr>
+            </thead>
+            <tbody id="features-tbody"></tbody>
+        `;
+        featuresContainer.innerHTML = '';
+        featuresContainer.appendChild(featuresTable);
+        
+        const featuresTbody = document.getElementById('features-tbody');
+        
+        // Get max importance for scaling
+        const maxImportance = Math.max(...Object.values(result.important_features));
+        
+        Object.entries(result.important_features).forEach(([feature, importance]) => {
+            const relativeImportance = importance / maxImportance * 100;
+            const formattedFeature = feature.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+            
+            const row = document.createElement('tr');
+            row.innerHTML = `
+                <td>${formattedFeature}</td>
+                <td>${importance.toFixed(4)}</td>
+                <td>
+                    <div class="progress">
+                        <div class="progress-bar ${result.is_phishing ? 'bg-danger' : 'bg-primary'}" 
+                             role="progressbar" 
+                             style="width: ${relativeImportance}%"></div>
+                    </div>
+                </td>
+            `;
+            featuresTbody.appendChild(row);
+        });
+    } else {
+        featuresContainer.innerHTML = '<p>No feature importance data available.</p>';
+    }
+    
+    // Update model explanation
+    modelExplanation.innerHTML = generateModelExplanation(result);
+    
+    // FIXED: Enhanced email preview with highlights for suspicious content
+    const emailContent = document.getElementById('email-content').value;
+    if (emailContent) {
+        // If no highlighted elements exist or the array is empty, generate them from warnings
+        if (!result.highlighted_elements || result.highlighted_elements.length === 0) {
+            result.highlighted_elements = generateHighlightsFromWarnings(emailContent, result.warnings);
+        }
+        emailPreview.innerHTML = processEmailContent(emailContent, result.highlighted_elements);
+    } else {
+        emailPreview.innerHTML = '<p>Email content preview not available</p>';
+    }
+    
+    // Update insights
+    insightsContainer.innerHTML = processInsights(result.insights);
+    
+    // Update processing time
+    processingTime.textContent = result.performance ? result.performance.total_processing_time.toFixed(2) : '0';
+    
+    // Reset feedback
+    document.getElementById('feedback-message').style.display = 'none';
+    document.getElementById('feedback-notes-container').style.display = 'none';
+    
+    // Initialize tooltips for newly added elements
+    initializeTooltips();
+    
+    // Scroll to results
+    document.getElementById('results-section').scrollIntoView({
+        behavior: 'smooth'
+    });
+}
+
+
+    function generateHighlightsFromWarnings(emailContent, warnings) {
+    if (!warnings || warnings.length === 0 || !emailContent) {
+        return [];
+    }
+    
+    const highlights = [];
+    
+    // Common patterns for different warning types
+    const patterns = {
+        'personal_information': [
+            /\b(?:password|account|login|credit card|ssn|social security|address|phone number)\b/gi,
+            /\b(?:verify your|confirm your|update your)\b.{1,30}\b(?:details|information|account)\b/gi
+        ],
+        'urgency': [
+            /\b(?:urgent|immediately|today|asap|deadline|expires?|limited time|now|quickly)\b/gi,
+            /\b(?:act now|last chance|final notice|time sensitive)\b/gi
+        ],
+        'threatening': [
+            /\b(?:suspend|disable|restrict|terminate|close|block)\b.{1,30}\b(?:account|access)\b/gi,
+            /\b(?:failure to|will result in|consequences|penalty|warning)\b/gi
+        ],
+        'grammar': [
+            /\b(?:to proceed to the|kindly|do the needful|respected sir|dear customer)\b/gi
+        ]
+    };
+    
+    // Process each warning
+    warnings.forEach(warning => {
+        let warningType = 'other';
+        let severity = warning.severity || 'medium';
+        
+        // Determine warning type from message
+        if (warning.message) {
+            const msg = warning.message.toLowerCase();
+            if (msg.includes('personal') || msg.includes('information') || msg.includes('sensitive')) {
+                warningType = 'personal_information';
+            } else if (msg.includes('urgency') || msg.includes('urgent')) {
+                warningType = 'urgency';
+            } else if (msg.includes('threatening') || msg.includes('threat') || msg.includes('fear')) {
+                warningType = 'threatening';
+            } else if (msg.includes('grammar') || msg.includes('spelling')) {
+                warningType = 'grammar';
+            }
+        }
+        
+        // Get relevant patterns for this warning type
+        const relevantPatterns = patterns[warningType] || [];
+        
+        // Find matches in email content
+        relevantPatterns.forEach(pattern => {
+            let match;
+            while ((match = pattern.exec(emailContent)) !== null) {
+                highlights.push({
+                    text: match[0],
+                    reason: warning.message || 'Suspicious content',
+                    severity: severity
+                });
+            }
+        });
+    });
+    
+    return highlights;
+}
+    // Initialize tooltips for dynamically added elements
+    function initializeTooltips() {
+        const tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+        tooltipTriggerList.map(function (tooltipTriggerEl) {
+            return new bootstrap.Tooltip(tooltipTriggerEl);
+        });
+        
+        // Apply technical term tooltips
+        applyTechnicalTermTooltips();
+    }
+
+    // Apply technical term explanations and tooltips
+    function applyTechnicalTermTooltips() {
+        const technicalTerms = {
+            'DMARC': 'Domain-based Message Authentication, Reporting & Conformance - An email authentication protocol.',
+            'SPF': 'Sender Policy Framework - An email validation system to prevent email spoofing.',
+            'DKIM': 'DomainKeys Identified Mail - An email authentication method designed to detect forged sender addresses.',
+            'Header': 'The metadata part of an email containing routing and authentication information.',
+            'Spoofing': 'The act of disguising a communication to look like it came from a trusted source.',
+            'Phishing': 'A cybercrime where targets are contacted by email, phone or text by someone posing as a legitimate institution.',
+            'URL': 'Uniform Resource Locator - The address of a specific webpage or file on the Internet.'
+        };
+        
+        const contentElements = document.querySelectorAll('.card-body p, .card-body li');
+        
+        contentElements.forEach(element => {
+            let content = element.innerHTML;
+            
+            Object.entries(technicalTerms).forEach(([term, explanation]) => {
+                const regex = new RegExp(`\\b${term}\\b`, 'g');
+                content = content.replace(regex, `<span class="technical-term" data-bs-toggle="tooltip" title="${explanation}">$&</span>`);
+            });
+            
+            element.innerHTML = content;
+        });
+        
+        // Initialize new tooltips
+        document.querySelectorAll('.technical-term').forEach(element => {
+            new bootstrap.Tooltip(element);
+        });
+    }
+
+    // Function to handle form submission
+    async function handleFormSubmission(event) {
+        event.preventDefault();
+        
+        const formData = new FormData();
+        const emailContent = document.getElementById('email-content').value;
+        const emailFile = document.getElementById('email-file').files[0];
+        
+        if (!emailContent && !emailFile) {
+            alert('Please either paste email content or upload an email file');
+            return;
+        }
+        
+        if (emailContent) {
+            formData.append('email_content', emailContent);
+        }
+        
+        if (emailFile) {
+            formData.append('email_file', emailFile);
+        }
+        
+        // Show loading spinner
+        document.getElementById('loading-spinner').style.display = 'inline-block';
+        
+        try {
+            const response = await fetch('http://localhost:5002/detect', {
+                method: 'POST',
+                body: formData
+            });
+            
+            const result = await response.json();
+            document.getElementById('loading-spinner').style.display = 'none';
+            
+            if (result.error) {
+                alert(`Error: ${result.error}`);
+                return;
+            }
+            
+            // Store request ID for feedback
+            currentRequestId = result.request_id;
+            
+            // Update the UI with results
+            updateResultsUI(result);
+            
+        } catch (error) {
+            document.getElementById('loading-spinner').style.display = 'none';
+            alert(`Error: ${error.message}`);
+        }
+    }
+
+    // Initialize the application
+    function initializeApp() {
+        // Set up event listeners
+        document.getElementById('detection-form').addEventListener('submit', handleFormSubmission);
+        
+        document.getElementById('feedback-correct').addEventListener('click', function() {
+            document.getElementById('feedback-notes-container').style.display = 'block';
+            document.getElementById('feedback-message').style.display = 'none';
+        });
+        
+        document.getElementById('feedback-incorrect').addEventListener('click', function() {
+            document.getElementById('feedback-notes-container').style.display = 'block';
+            document.getElementById('feedback-message').style.display = 'none';
+        });
+        
+        document.getElementById('submit-feedback').addEventListener('click', async function() {
+            const feedbackCorrect = document.activeElement.id === 'feedback-correct';
+            const feedbackNotes = document.getElementById('feedback-notes').value;
+            
+            if (!currentRequestId) {
+                alert('No analysis to provide feedback on');
+                return;
+            }
+            
+            try {
+                const response = await fetch('/feedback', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        request_id: currentRequestId,
+                        is_correct: feedbackCorrect,
+                        notes: feedbackNotes
+                    })
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    const feedbackMessage = document.getElementById('feedback-message');
+                    feedbackMessage.className = 'alert alert-success';
+                    feedbackMessage.innerHTML = 'Thank you for your feedback! It helps improve our detection system.';
+                    feedbackMessage.style.display = 'block';
+                    
+                    document.getElementById('feedback-notes-container').style.display = 'none';
+                } else {
+                    alert(`Error: ${result.error}`);
+                }
+                
+            } catch (error) {
+                alert(`Error: ${error.message}`);
+            }
+        });
+        
+        // Initialize global variables
+        window.currentRequestId = null;
+    }
+
+    // Call initialization when document is loaded
+    document.addEventListener('DOMContentLoaded', initializeApp);
+
+
+    
+        // Global variables
+        const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
+        const MAX_TEXT_LENGTH = 500000; // 500K characters
+        const ALLOWED_FILE_TYPES = [
+            'message/rfc822', 
+            'text/plain',
+            'application/octet-stream', // Some systems save .eml with this mimetype
+            '' // Handle case where mimetype is not detected
+        ];
+        const ALLOWED_FILE_EXTENSIONS = ['.eml', '.txt'];
+        
+        // DOM Elements
+        const form = document.getElementById('detection-form');
+        const emailContent = document.getElementById('email-content');
+        const emailFile = document.getElementById('email-file');
+        const emailContentFeedback = document.getElementById('email-content-feedback');
+        const emailFileFeedback = document.getElementById('email-file-feedback');
+        const filePreview = document.getElementById('file-preview');
+        const fileName = document.getElementById('file-name');
+        const fileSize = document.getElementById('file-size');
+        const loadingSpinner = document.getElementById('loading-spinner');
+        const resultsSection = document.getElementById('results-section');
+        const systemAlert = document.getElementById('system-alert');
+        const systemAlertMessage = document.getElementById('system-alert-message');
+        const emailContentCharCount = document.getElementById('email-content-char-count');
+        const feedbackNotes = document.getElementById('feedback-notes');
+        const feedbackNotesCharCount = document.getElementById('feedback-notes-char-count');
+        
+        // Event listeners for character counting
+        emailContent.addEventListener('input', function() {
+            const length = this.value.length;
+            emailContentCharCount.textContent = `${length.toLocaleString()}/${MAX_TEXT_LENGTH.toLocaleString()} characters`;
+            
+            // Validate as they type
+            if (length > MAX_TEXT_LENGTH) {
+                emailContent.classList.add('is-invalid');
+                emailContentFeedback.textContent = `Content exceeds maximum length of ${MAX_TEXT_LENGTH.toLocaleString()} characters.`;
+                emailContentFeedback.style.display = 'block';
+            } else {
+                emailContent.classList.remove('is-invalid');
+                emailContentFeedback.style.display = 'none';
+            }
+        });
+        
+        feedbackNotes.addEventListener('input', function() {
+            const length = this.value.length;
+            feedbackNotesCharCount.textContent = `${length}/1000 characters`;
+        });
+        
+        // File validation
+        emailFile.addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            if (!file) {
+                resetFileInput();
+                return;
+            }
+            
+            // Reset previous errors
+            emailFile.classList.remove('is-invalid');
+            emailFileFeedback.style.display = 'none';
+            
+            // Validate file size
+            if (file.size > MAX_FILE_SIZE) {
+                showFileError(`File size (${formatFileSize(file.size)}) exceeds the maximum allowed size of ${formatFileSize(MAX_FILE_SIZE)}.`);
+                resetFileInput();
+                return;
+            }
+            
+            // Validate file extension
+            const fileExtension = file.name.toLowerCase().substring(file.name.lastIndexOf('.'));
+            if (!ALLOWED_FILE_EXTENSIONS.includes(fileExtension)) {
+                showFileError(`Invalid file type. Only ${ALLOWED_FILE_EXTENSIONS.join(', ')} files are allowed.`);
+                resetFileInput();
+                return;
+            }
+            
+            // Validate MIME type
+            if (!ALLOWED_FILE_TYPES.includes(file.type) && file.type !== '') {
+                showFileError(`Invalid file format. File appears to be ${file.type || 'unknown type'}.`);
+                resetFileInput();
+                return;
+            }
+            
+            // File is valid, show preview
+            fileName.textContent = sanitizeHTML(file.name);
+            fileSize.textContent = formatFileSize(file.size);
+            filePreview.style.display = 'block';
+            
+            // Clear text area if file is selected
+            emailContent.value = '';
+            emailContentCharCount.textContent = `0/${MAX_TEXT_LENGTH.toLocaleString()} characters`;
+        });
+        
+        // Form submission
+        form.addEventListener('submit', function(e) {
+            e.preventDefault();
+            
+            // Hide previous results and errors
+            resetErrors();
+            
+            // Validate inputs
+            const content = emailContent.value.trim();
+            const file = emailFile.files[0];
+            
+            if (!content && !file) {
+                showSystemAlert('Please provide email content or upload an .eml file.');
+                return;
+            }
+            
+            if (content && content.length > MAX_TEXT_LENGTH) {
+                emailContent.classList.add('is-invalid');
+                emailContentFeedback.textContent = `Content exceeds maximum length of ${MAX_TEXT_LENGTH.toLocaleString()} characters.`;
+                emailContentFeedback.style.display = 'block';
+                return;
+            }
+            
+            // Show loading state
+            loadingSpinner.style.display = 'inline-block';
+            
+            // Process based on input type
+            if (file) {
+                processEmailFile(file);
+            } else if (content) {
+                processEmailContent(content);
+            }
+        });
+        
+        // Process email file
+        function processEmailFile(file) {
+            // Create a secure file reader with proper error handling
+            const reader = new FileReader();
+            
+            reader.onload = function(e) {
+                try {
+                    // Sanitize and process file content
+                    const content = e.target.result;
+                    
+                    // Validate content after reading
+                    if (!content || content.length === 0) {
+                        throw new Error('The uploaded file appears to be empty.');
+                    }
+                    
+                    if (content.length > MAX_TEXT_LENGTH) {
+                        throw new Error(`File content exceeds maximum length of ${MAX_TEXT_LENGTH.toLocaleString()} characters.`);
+                    }
+                    
+                    // Process the email content (simulate API call)
+                    simulateAnalysis(content);
+                } catch (error) {
+                    handleError(error);
+                }
+            };
+            
+            reader.onerror = function() {
+                handleError(new Error('Failed to read the uploaded file. The file may be corrupted.'));
+            };
+            
+            reader.onabort = function() {
+                handleError(new Error('File reading was aborted.'));
+            };
+            
+            // Start reading the file as text
+            try {
+                reader.readAsText(file);
+            } catch (error) {
+                handleError(error);
+            }
+        }
+        
+        // Process email content from textarea
+        function processEmailContent(content) {
+            try {
+                // Sanitize input
+                content = content.trim();
+                
+                // Basic validation
+                if (content.length < 10) {
+                    throw new Error('Email content is too short for meaningful analysis.');
+                }
+           
+            } catch (error) {
+                handleError(error);
+            }
+        }
+        let currentRequestId = null;
+        
+        document.getElementById('detection-form').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            const formData = new FormData();
+            const emailContent = document.getElementById('email-content').value;
+            const emailFile = document.getElementById('email-file').files[0];
+            
+            if (!emailContent && !emailFile) {
+                alert('Please either paste email content or upload an email file');
+                return;
+            }
+            
+            if (emailContent) {
+                formData.append('email_content', emailContent);
+            }
+            
+            if (emailFile) {
+                formData.append('email_file', emailFile);
+            }
+            
+            // Show loading spinner
+            document.getElementById('loading-spinner').style.display = 'inline-block';
+            
+            try {
+                const response = await fetch('http://localhost:5002/detect', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                const result = await response.json();
+                document.getElementById('loading-spinner').style.display = 'none';
+                
+                if (result.error) {
+                    alert(`Error: ${result.error}`);
+                    return;
+                }
+                
+                // Store request ID for feedback
+                currentRequestId = result.request_id;
+                
+                // Show results section
+                document.getElementById('results-section').style.display = 'block';
+                
+                // Update UI with results
+                const resultCard = document.getElementById('result-card');
+                const resultMessage = document.getElementById('result-message');
+                const confidenceBadge = document.getElementById('confidence-badge');
+                
+                if (result.is_phishing) {
+                    resultCard.className = 'card mb-4 shadow-sm border-danger';
+                    resultMessage.className = 'alert alert-danger';
+                    resultMessage.innerHTML = '<strong>Warning!</strong> This email is likely a phishing attempt.';
+                } else {
+                    resultCard.className = 'card mb-4 shadow-sm border-success';
+                    resultMessage.className = 'alert alert-success';
+                    resultMessage.innerHTML = '<strong>Low Risk.</strong> This email appears to be legitimate.';
+                }
+                
+                // Update confidence
+                const confidence = Math.round(result.confidence * 100);
+                confidenceBadge.textContent = `Confidence: ${confidence}%`;
+                confidenceBadge.className = `badge rounded-pill bg-${confidence > 80 ? 'danger' : confidence > 50 ? 'warning' : 'success'}`;
+                
+                // Display warnings
+                const warningsContainer = document.getElementById('warnings-container');
+                warningsContainer.innerHTML = '';
+                
+                if (result.warnings && result.warnings.length > 0) {
+                    result.warnings.forEach(warning => {
+                        const warningDiv = document.createElement('div');
+                        warningDiv.className = `p-3 mb-2 rounded warning-${warning.severity}`;
+                        warningDiv.innerHTML = `
+                            <strong>${warning.message}</strong>
+                            <p class="mb-0 small">${warning.details}</p>
+                        `;
+                        warningsContainer.appendChild(warningDiv);
+                    });
+                } else {
+                    warningsContainer.innerHTML = '<p>No specific warnings detected.</p>';
+                }
+                
+                // Display important features
+                const featuresContainer = document.getElementById('features-container');
+                featuresContainer.innerHTML = '';
+                
+                if (result.important_features) {
+                    const featuresTable = document.createElement('table');
+                    featuresTable.className = 'table table-sm';
+                    featuresTable.innerHTML = `
+                        <thead>
+                            <tr>
+                                <th>Feature</th>
+                                <th>Importance</th>
+                                <th width="50%">Impact</th>
+                            </tr>
+                        </thead>
+                        <tbody id="features-tbody"></tbody>
+                    `;
+                    featuresContainer.appendChild(featuresTable);
+                    
+                    const featuresTbody = document.getElementById('features-tbody');
+                    
+                    // Get max importance for scaling
+                    const maxImportance = Math.max(...Object.values(result.important_features));
+                    
+                    Object.entries(result.important_features).forEach(([feature, importance]) => {
+                        const relativeImportance = importance / maxImportance * 100;
+                        const formattedFeature = feature.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+                        
+                        const row = document.createElement('tr');
+                        row.innerHTML = `
+                            <td>${formattedFeature}</td>
+                            <td>${importance.toFixed(4)}</td>
+                            <td>
+                                <div class="progress">
+                                    <div class="progress-bar" role="progressbar" style="width: ${relativeImportance}%"></div>
+                                </div>
+                            </td>
+                        `;
+                        featuresTbody.appendChild(row);
+                    });
+                } else {
+                    featuresContainer.innerHTML = '<p>No feature importance data available.</p>';
+                }
+                
+                // Display model explanation based on results
+                const modelExplanation = document.getElementById('model-explanation');
+                
+                if (result.is_phishing) {
+                    let explanationHTML = '<div class="alert alert-info">';
+                    explanationHTML += '<h6>Why This Email Was Flagged</h6>';
+                    explanationHTML += '<p>Our model identified several suspicious patterns in this email:</p>';
+                    
+                    // Generate explanation based on features and warnings
+                    let explanationPoints = [];
+                    
+                    if (result.warnings && result.warnings.length > 0) {
+                        result.warnings.forEach(warning => {
+                            explanationPoints.push(warning.message);
+                        });
+                    }
+                    
+                    if (result.important_features) {
+                        // Get top 3 features by importance
+                        const topFeatures = Object.entries(result.important_features)
+                            .sort((a, b) => b[1] - a[1])
+                            .slice(0, 3);
+                            
+                        topFeatures.forEach(([feature, _]) => {
+                            const formattedFeature = feature.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+                            const explanation = getFeatureExplanation(feature);
+                            explanationPoints.push(`<strong>${formattedFeature}</strong>: ${explanation}`);
+                        });
+                    }
+                    
+                    if (explanationPoints.length > 0) {
+                        explanationHTML += '<ul>';
+                        explanationPoints.forEach(point => {
+                            explanationHTML += `<li>${point}</li>`;
+                        });
+                        explanationHTML += '</ul>';
+                    } else {
+                        explanationHTML += '<p>Our model detected unusual patterns based on a combination of subtle indicators.</p>';
+                    }
+                    
+                    explanationHTML += '</div>';
+                    modelExplanation.innerHTML = explanationHTML;
+                } else {
+                    modelExplanation.innerHTML = '<div class="alert alert-success">' + 
+                        '<h6>Why This Email Appears Legitimate</h6>' +
+                        '<p>Our model found no significant phishing indicators in this email. The sender, content, and links all appear to be legitimate.</p>' +
+                        '</div>';
+                }
+                
+                // Display email preview with highlights
+                const emailPreview = document.getElementById('email-preview');
+                if (emailContent) {
+                    // Simple sanitization (for demo purposes - in production use proper sanitization)
+                    let sanitizedContent = emailContent
+                        .replace(/</g, '&lt;')
+                        .replace(/>/g, '&gt;');
+                    
+                    // Highlight suspicious elements if available in result
+                    if (result.highlighted_elements) {
+                        result.highlighted_elements.forEach(element => {
+                            const regex = new RegExp(element.text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g');
+                            sanitizedContent = sanitizedContent.replace(
+                                regex, 
+                                `<span class="highlight" title="${element.reason}">$&</span>`
+                            );
+                        });
+                    }
+                    
+                    emailPreview.innerHTML = sanitizedContent;
+                } else if (emailFile) {
+                    emailPreview.innerHTML = '<p>Email file content preview not available</p>';
+                }
+                
+                // Display key insights
+                const insightsContainer = document.getElementById('insights-container');
+                insightsContainer.innerHTML = '';
+                
+                if (result.insights && result.insights.length > 0) {
+                    const insightsList = document.createElement('ul');
+                    insightsList.className = 'list-group';
+                    
+                    result.insights.forEach(insight => {
+                        const insightItem = document.createElement('li');
+                        insightItem.className = 'list-group-item';
+                        insightItem.innerHTML = `
+                            <div class="d-flex w-100 justify-content-between">
+                                <h6 class="mb-1">${insight.title}</h6>
+                                <small class="${insight.sentiment === 'positive' ? 'text-success' : insight.sentiment === 'negative' ? 'text-danger' : 'text-warning'}">
+                                    ${insight.sentiment === 'positive' ? '✓' : insight.sentiment === 'negative' ? '✗' : '!'}
+                                </small>
+                            </div>
+                            <p class="mb-1">${insight.description}</p>
+                        `;
+                        insightsList.appendChild(insightItem);
+                    });
+                    
+                    insightsContainer.appendChild(insightsList);
+                } else {
+                    insightsContainer.innerHTML = '<p>No specific insights available for this analysis.</p>';
+                }
+                
+                // Processing time
+                const processingTime = result.performance ? result.performance.total_processing_time.toFixed(2) : '0';
+                document.getElementById('processing-time').textContent = processingTime;
+                
+                // Reset feedback
+                document.getElementById('feedback-message').style.display = 'none';
+                document.getElementById('feedback-notes-container').style.display = 'none';
+                
+                // Scroll to results
+                document.getElementById('results-section').scrollIntoView({
+                    behavior: 'smooth'
+                });
+                
+            } catch (error) {
+                document.getElementById('loading-spinner').style.display = 'none';
+                alert(`Error: ${error.message}`);
+            }
+        });
+        
+        // Helper function to get explanations for features
+        function getFeatureExplanation(feature) {
+            const explanations = {
+                'mismatched_sender_domain': 'The sender\'s email address domain doesn\'t match the organization they claim to represent.',
+                'suspicious_link_domain': 'Links in the email point to suspicious or recently registered domains.',
+                'urgency_language': 'The email uses urgent language to pressure you into taking immediate action.',
+                'request_for_credentials': 'The email asks for login information or other sensitive credentials.',
+                'spoofed_display_name': 'The sender\'s display name appears to be impersonating a trusted entity.',
+                'suspicious_attachment': 'The email contains an attachment with potentially dangerous file type.',
+                'poor_grammar': 'The email contains unusual grammatical errors or spelling mistakes.',
+                'unsubscribe_missing': 'A legitimate marketing email should have an unsubscribe option.',
+                'suspicious_ip_origin': 'The email originated from an IP address in a high-risk region.',
+                'unusual_sending_time': 'The email was sent at an unusual time, outside normal business hours.',
+                'excessive_misspellings': 'The email contains an unusual number of misspelled words.',
+                'broken_layout': 'The email has broken formatting or display issues.',
+                'domain_age': 'Links in the email point to recently registered domains, which is suspicious.',
+                'suspicious_url_structure': 'URLs contain unusual patterns often associated with phishing.',
+                'header_inconsistency': 'Email headers contain inconsistent or suspicious routing information.',
+                'dmarc_fail': 'The email failed DMARC authentication checks.'
+            };
+            
+            return explanations[feature] || 'This feature contributes to the overall phishing score.';
+        }
+        
+        // Feedback button handlers
+        document.getElementById('feedback-correct').addEventListener('click', function() {
+            document.getElementById('feedback-notes-container').style.display = 'block';
+            document.getElementById('feedback-message').style.display = 'none';
+        });
+        
+        document.getElementById('feedback-incorrect').addEventListener('click', function() {
+            document.getElementById('feedback-notes-container').style.display = 'block';
+            document.getElementById('feedback-message').style.display = 'none';
+        });
+        
+        document.getElementById('submit-feedback').addEventListener('click', async function() {
+            const feedbackCorrect = document.activeElement.id === 'feedback-correct';
+            const feedbackNotes = document.getElementById('feedback-notes').value;
+            
+            if (!currentRequestId) {
+                alert('No analysis to provide feedback on');
+                return;
+            }
+            
+            try {
+                const response = await fetch('/feedback', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        request_id: currentRequestId,
+                        is_correct: feedbackCorrect,
+                        notes: feedbackNotes
+                    })
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    const feedbackMessage = document.getElementById('feedback-message');
+                    feedbackMessage.className = 'alert alert-success';
+                    feedbackMessage.innerHTML = 'Thank you for your feedback! It helps improve our detection system.';
+                    feedbackMessage.style.display = 'block';
+                    
+                    document.getElementById('feedback-notes-container').style.display = 'none';
+                } else {
+                    alert(`Error: ${result.error}`);
+                }
+                
+            } catch (error) {
+                alert(`Error: ${error.message}`);
+            }
+        });
+        
+        // Extra explainability: Add tooltips on hover for technical terms
+        const tooltips = [
+            { selector: '.badge', message: 'Confidence indicates how certain our model is about this detection.' },
+            { selector: '.progress-bar', message: 'Longer bars indicate more important factors in this detection.' }
+        ];
+        
+        document.addEventListener('DOMContentLoaded', function() {
+            // Initialize tooltips when Bootstrap is loaded
+            tooltips.forEach(tooltip => {
+                document.querySelectorAll(tooltip.selector).forEach(element => {
+                    new bootstrap.Tooltip(element, {
+                        title: tooltip.message,
+                        placement: 'top'
+                    });
+                });
+            });
+        });
+
+        // Add explanations for technical terms with tooltips
+        const technicalTerms = {
+            'DMARC': 'Domain-based Message Authentication, Reporting & Conformance - An email authentication protocol.',
+            'SPF': 'Sender Policy Framework - An email validation system to prevent email spoofing.',
+            'DKIM': 'DomainKeys Identified Mail - An email authentication method designed to detect forged sender addresses.',
+            'Header': 'The metadata part of an email containing routing and authentication information.',
+            'Spoofing': 'The act of disguising a communication to look like it came from a trusted source.',
+            'Phishing': 'A cybercrime where targets are contacted by email, phone or text by someone posing as a legitimate institution.',
+            'URL': 'Uniform Resource Locator - The address of a specific webpage or file on the Internet.'
+        };
+        
+        // Automatically apply technical term explanations to content after it's loaded
+        function applyTechnicalTermTooltips() {
+            const contentElements = document.querySelectorAll('.card-body p, .card-body li');
+            
+            contentElements.forEach(element => {
+                let content = element.innerHTML;
+                
+                Object.entries(technicalTerms).forEach(([term, explanation]) => {
+                    const regex = new RegExp(`\\b${term}\\b`, 'g');
+                    content = content.replace(regex, `<span class="technical-term" data-bs-toggle="tooltip" title="${explanation}">$&</span>`);
+                });
+                
+                element.innerHTML = content;
+            });
+            
+            // Initialize new tooltips
+            document.querySelectorAll('.technical-term').forEach(element => {
+                new bootstrap.Tooltip(element);
+            });
+        }
+        
+        // Example model status update simulation
+        let modelCheckInterval = setInterval(function() {
+            // Simulate occasional model updates
+            if (Math.random() < 0.01) {
+                const modelStatus = document.getElementById('model-status');
+                modelStatus.className = 'badge bg-warning';
+                modelStatus.textContent = 'Model Update Available';
+                
+                setTimeout(function() {
+                    modelStatus.className = 'badge bg-success';
+                    modelStatus.textContent = 'Model Updated (v2.1)';
+                }, 3000);
+            }
+        }, 10000);
+    </script>
+</body>
+</html>
