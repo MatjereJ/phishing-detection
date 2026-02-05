@@ -957,7 +957,7 @@ function generateHighlightsFromWarnings(emailContent, warnings) {
         document.getElementById('loading-spinner').style.display = 'inline-block';
         
         try {
-            const response = await fetch('http://localhost:5002/detect', {
+            const response = await fetch('http://phishing-detection-br53.onrender.com/analyze', {
                 method: 'POST',
                 body: formData
             });
@@ -1256,7 +1256,7 @@ function generateHighlightsFromWarnings(emailContent, warnings) {
             document.getElementById('loading-spinner').style.display = 'inline-block';
             
             try {
-                const response = await fetch('http://localhost:5002/analyze', {
+                const response = await fetch('http://phishing-detection-br53.onrender.com//analyze', {
                     method: 'POST',
                     body: formData
                 });
